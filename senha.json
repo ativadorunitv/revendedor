@@ -1,2 +1,17 @@
-
-rerewrewrwerwer
+{
+  "schema": 1,
+  "versionCode": 38,
+  "versionName": "1.5.2",
+  "latestVersionCode": 38,
+  "latestVersionInfo": "Versão 1.5.2",
+  "codeDownloader": "",
+  "releaseNotes": [
+    "Restaura a inicialização estável baseada na versão 1.4.9.",
+    "Remove temporariamente a verificação global que estava fechando o app durante o carregamento.",
+    "Preserva login, favoritos, Continue assistindo e demais dados existentes."
+  ],
+  "url": "https://tvonplus.github.io/app/Android%20TV/NexoPlay_v1.5.2.apk",
+  "apk": "https://tvonplus.github.io/app/Android%20TV/NexoPlay_v1.5.2.apk",
+  "mandatory": false,
+  "sha256": "1C3431842F37A9E87BF4DF5F8F7EEC2527319C0977C906EDFAF5F063FC5FA8C2"
+}
