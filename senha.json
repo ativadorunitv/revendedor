@@ -13,5 +13,13 @@
   "url": "https://tvonplus.github.io/app/Android%20TV/NexoPlay_v1.5.2.apk",
   "apk": "https://tvonplus.github.io/app/Android%20TV/NexoPlay_v1.5.2.apk",
   "mandatory": false,
-  "sha256": "1C3431842F37A9E87BF4DF5F8F7EEC2527319C0977C906EDFAF5F063FC5FA8C2"
+  "sha256": "1C3431842F37A9E87BF4DF5F8F7EEC2527319C0977C906EDFAF5F063FC5FA8C2",
+  "acessos": [
+    {
+      "id": "exemplo-569654",
+      "hash": "dd107d65132acf52ad052739409829a2e80b0b6752d3aa406da5f97e6dced5a1",
+      "ativo": true,
+      "criadoEm": "2026-09-01T00:00:00.000Z"
+    }
+  ]
 }
