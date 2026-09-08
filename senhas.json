@@ -1,12 +1,54 @@
 {
   "versao": 2,
-  "atualizadoEm": "2026-09-08T18:37:47.504Z",
+  "atualizadoEm": "2026-09-08T19:17:59.376Z",
   "senhas": [
     {
       "id": "cliente-mtsuk3v7-7d1qb7",
       "nome": "Zayan Doux",
       "senha": "503313",
       "hashSha256": "6f18f2fc987cd39f6b6bfec66526b8a896f2c697c3947e925c14b7ffe2cc8460",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt1x621-1dtkpjy",
+      "nome": "Kenia",
+      "senha": "818596",
+      "hashSha256": "9c783b14ef72a608d665e988276c8524912439b599b0643daca5d6681d730909",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt1xcfd-vbqmyp",
+      "nome": "Aloncio",
+      "senha": "152326",
+      "hashSha256": "7eb9f4ba528809690e7158fb3c4ff9ffba6b2e74126e711e02aeb973beb7ca73",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt1xie1-1e8gyoc",
+      "nome": "Julierme",
+      "senha": "662202",
+      "hashSha256": "e81e27881cebc0784af24cc5d71d43469a4e1108877b85df705703efe0d0b902",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt1xnpv-pmhlup",
+      "nome": "Clademilson",
+      "senha": "420810",
+      "hashSha256": "51bc48745bf8ef86eed2bb52575be5678504edfffe805b3bb72c950c23a05633",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt1xs28-6h5jab",
+      "nome": "Aleson",
+      "senha": "552164",
+      "hashSha256": "09702d0cae4ad0935935055e8447e7eabea778e5a138c3cdaa4312e174986860",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt1xvw1-1kjcvz2",
+      "nome": "Lucas",
+      "senha": "280872",
+      "hashSha256": "a4c6d3afcbb6399c263612989129bed9bcdf35cd149bb841d2ef07ee06d18f36",
       "bloqueado": false
     }
   ]
