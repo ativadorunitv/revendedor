@@ -111,10 +111,10 @@
     .users { display: grid; gap: 10px; }
     .user { border: 1px solid var(--line); border-radius: 14px; padding: 13px; background: rgba(1, 18, 10, .38); }
     .user.blocked { border-color: rgba(255, 139, 139, .17); opacity: .78; }
-    .user-main { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 12px; }
+    .user-main { display: block; }
     .user-fields { display: grid; grid-template-columns: minmax(180px, 1fr) 150px; align-items: end; gap: 12px; }
     .client-password { height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(118, 231, 163, .22); border-radius: 11px; color: #fff; background: rgba(1, 18, 10, .58); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 20px; letter-spacing: .16em; }
-    .user-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+    .user-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-start; margin-top: 12px; }
     .user-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--muted); font-size: 12px; }
     .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
     .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
