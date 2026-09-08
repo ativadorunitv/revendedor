@@ -1,14 +1,7 @@
 {
   "versao": 2,
-  "atualizadoEm": "2026-09-08T18:13:46.850Z",
+  "atualizadoEm": "2026-09-08T18:37:47.504Z",
   "senhas": [
-    {
-      "id": "cliente-inicial",
-      "nome": "Cliente inicial",
-      "senha": "842713",
-      "hashSha256": "b062486a16b921163bd9deb25886c6e5d4bd735615fe96ac764e895899ab28ea",
-      "bloqueado": false
-    },
     {
       "id": "cliente-mtsuk3v7-7d1qb7",
       "nome": "Zayan Doux",
