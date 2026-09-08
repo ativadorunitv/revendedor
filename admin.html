@@ -105,6 +105,11 @@
     .statusbar strong { color: var(--green); }
     .statusbar .changed { color: var(--warning); }
 
+    .client-search { position: relative; margin-bottom: 10px; }
+    .client-search svg { position: absolute; left: 11px; top: 50%; width: 17px; height: 17px; color: rgba(188, 230, 204, .55); pointer-events: none; transform: translateY(-50%); }
+    .client-search input { height: 38px; padding-left: 36px; padding-right: 36px; }
+    .client-search input::-webkit-search-cancel-button { cursor: pointer; }
+
     .message { display: none; margin-top: 14px; border: 1px solid rgba(255, 126, 126, .2); border-radius: 11px; padding: 10px 12px; color: var(--danger); background: rgba(160, 34, 34, .13); font-size: 14px; line-height: 1.45; }
     .message.show { display: block; }
     .message.success { color: #baf5d1; border-color: rgba(93, 227, 148, .24); background: rgba(41, 153, 88, .12); }
@@ -133,6 +138,10 @@
     .empty { margin: 0; border: 1px dashed var(--line); border-radius: 13px; padding: 20px; text-align: center; color: var(--muted); font-size: 14px; }
     .footer-action { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; margin-top: 20px; }
     .footer-action p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .footer-buttons { display: flex; align-items: center; gap: 7px; }
+    .copy-json-button { width: 42px; min-width: 42px; padding: 0; }
+    .copy-json-button svg { width: 17px; height: 17px; }
+    .copy-json-button.copied { color: #052013; background: var(--green); }
 
     @media (max-width: 880px) {
       .user-main { grid-template-columns: 1fr; }
@@ -146,6 +155,7 @@
       .new-user-row, .footer-action { grid-template-columns: 1fr; }
       .user-actions { justify-content: flex-start; }
       .button.create { width: 100%; }
+      .footer-buttons { justify-content: flex-end; }
     }
 
     @media (max-width: 480px) {
@@ -218,6 +228,10 @@
           </div>
           <strong id="user-count">0 clientes</strong>
         </div>
+        <div class="client-search">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input id="client-search" type="search" placeholder="Buscar por nome, senha ou ID" aria-label="Buscar clientes" disabled>
+        </div>
         <div id="users" class="users"></div>
       </section>
 
@@ -225,7 +239,12 @@
 
       <div class="footer-action">
         <p>Depois de qualquer alteração, baixe o arquivo e substitua o <strong>senhas.json</strong> no repositório.</p>
-        <button id="download-button" class="button" type="button" disabled>Baixar senhas.json</button>
+        <div class="footer-buttons">
+          <button id="copy-json-button" class="button secondary copy-json-button" type="button" aria-label="Copiar conteúdo do senhas.json" title="Copiar conteúdo do senhas.json" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+          <button id="download-button" class="button" type="button" disabled>Baixar senhas.json</button>
+        </div>
       </div>
     </section>
   </main>
@@ -248,6 +267,8 @@
     const loadStatus = document.getElementById("load-status");
     const createButton = document.getElementById("create-button");
     const downloadButton = document.getElementById("download-button");
+    const copyJsonButton = document.getElementById("copy-json-button");
+    const clientSearch = document.getElementById("client-search");
     const passwordResult = document.getElementById("password-result");
     const passwordResultLabel = document.getElementById("password-result-label");
     const generatedPasswordElement = document.getElementById("generated-password");
@@ -264,6 +285,23 @@
       element.textContent = text;
       element.classList.toggle("show", Boolean(text));
       element.classList.toggle("success", Boolean(text) && success);
+    }
+
+    async function copyText(value) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+        return;
+      }
+      const helper = document.createElement("textarea");
+      helper.value = value;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      helper.remove();
+      if (!copied) throw new Error("Falha ao copiar");
     }
 
     function validateAccessFile(data) {
@@ -284,6 +322,8 @@
       loadStatus.className = "";
       createButton.disabled = true;
       downloadButton.disabled = true;
+      copyJsonButton.disabled = true;
+      clientSearch.disabled = true;
       showMessage(panelMessage, "");
       try {
         const separator = PUBLIC_JSON_URL.includes("?") ? "&" : "?";
@@ -293,11 +333,17 @@
         hasChanges = false;
         generatedPassword = "";
         passwordResult.classList.remove("show");
+        clientSearch.value = "";
+        clientSearch.disabled = false;
+        copyJsonButton.disabled = false;
         loadStatus.textContent = `${accessFile.senhas.length} cliente(s)`;
         createButton.disabled = false;
         renderUsers();
       } catch (error) {
         accessFile = null;
+        clientSearch.value = "";
+        clientSearch.disabled = true;
+        copyJsonButton.disabled = true;
         usersElement.innerHTML = '<p class="empty">Não foi possível carregar os clientes publicados.</p>';
         userCount.textContent = "0 clientes";
         loadStatus.textContent = "falha ao carregar";
@@ -360,8 +406,22 @@
         return;
       }
 
-      userCount.textContent = `${accessFile.senhas.length} cliente(s)`;
-      usersElement.innerHTML = accessFile.senhas.map((record, index) => `
+      const query = clientSearch.value.trim().toLocaleLowerCase("pt-BR");
+      const visibleUsers = accessFile.senhas
+        .map((record, index) => ({ record, index }))
+        .filter(({ record }) => !query || [record.nome, record.senha, record.id]
+          .some(value => String(value || "").toLocaleLowerCase("pt-BR").includes(query)));
+
+      userCount.textContent = query
+        ? `${visibleUsers.length} de ${accessFile.senhas.length} cliente(s)`
+        : `${accessFile.senhas.length} cliente(s)`;
+
+      if (visibleUsers.length === 0) {
+        usersElement.innerHTML = '<p class="empty">Nenhum cliente encontrado.</p>';
+        return;
+      }
+
+      usersElement.innerHTML = visibleUsers.map(({ record, index }) => `
         <article class="user ${record.bloqueado ? "blocked" : ""}" data-index="${index}">
           <div class="user-meta">
             <span class="badge ${record.bloqueado ? "blocked" : "active"}">${record.bloqueado ? "Bloqueado" : "Ativo"}</span>
@@ -454,7 +514,7 @@
 
       if (button.classList.contains("copy-user-password")) {
         if (!record.senha) return;
-        await navigator.clipboard.writeText(record.senha);
+        await copyText(record.senha);
         const original = button.textContent;
         button.textContent = "Copiada";
         setTimeout(() => { button.textContent = original; }, 1400);
@@ -498,14 +558,15 @@
 
     document.getElementById("copy-button").addEventListener("click", async event => {
       if (!generatedPassword) return;
-      await navigator.clipboard.writeText(generatedPassword);
+      await copyText(generatedPassword);
       const original = event.currentTarget.textContent;
       event.currentTarget.textContent = "Copiado";
       setTimeout(() => { event.currentTarget.textContent = original; }, 1400);
     });
 
-    downloadButton.addEventListener("click", () => {
-      if (!accessFile) return;
+    clientSearch.addEventListener("input", renderUsers);
+
+    function buildAccessFileText() {
       const updated = {
         versao: 2,
         atualizadoEm: new Date().toISOString(),
@@ -517,7 +578,30 @@
           bloqueado: record.bloqueado
         }))
       };
-      const blob = new Blob([JSON.stringify(updated, null, 2) + "\n"], { type: "application/json" });
+      return JSON.stringify(updated, null, 2) + "\n";
+    }
+
+    copyJsonButton.addEventListener("click", async () => {
+      if (!accessFile) return;
+      try {
+        await copyText(buildAccessFileText());
+        copyJsonButton.classList.add("copied");
+        copyJsonButton.setAttribute("aria-label", "Conteúdo do senhas.json copiado");
+        copyJsonButton.title = "JSON copiado";
+        showMessage(panelMessage, "Conteúdo do senhas.json copiado.", true);
+        setTimeout(() => {
+          copyJsonButton.classList.remove("copied");
+          copyJsonButton.setAttribute("aria-label", "Copiar conteúdo do senhas.json");
+          copyJsonButton.title = "Copiar conteúdo do senhas.json";
+        }, 1400);
+      } catch (error) {
+        showMessage(panelMessage, "Não foi possível copiar o JSON. Abra o site publicado pelo GitHub Pages e tente novamente.");
+      }
+    });
+
+    downloadButton.addEventListener("click", () => {
+      if (!accessFile) return;
+      const blob = new Blob([buildAccessFileText()], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;

@@ -1,6 +1,6 @@
 {
   "versao": 2,
-  "atualizadoEm": "2026-09-08T19:17:59.376Z",
+  "atualizadoEm": "2026-09-08T19:37:51.585Z",
   "senhas": [
     {
       "id": "cliente-mtsuk3v7-7d1qb7",
@@ -49,6 +49,13 @@
       "nome": "Lucas",
       "senha": "280872",
       "hashSha256": "a4c6d3afcbb6399c263612989129bed9bcdf35cd149bb841d2ef07ee06d18f36",
+      "bloqueado": false
+    },
+    {
+      "id": "cliente-mtt2mlq2-6sw193",
+      "nome": "Rafhael Barros",
+      "senha": "521615",
+      "hashSha256": "6427f8d3cbf7aaee1dce094c4664689dfdaa388158544d140a49ae78a0b2b0a7",
       "bloqueado": false
     }
   ]
