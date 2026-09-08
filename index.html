@@ -28,7 +28,7 @@
       min-width: 320px;
       min-height: 100svh;
       display: grid;
-      place-items: center;
+      place-items: start center;
       overflow-x: hidden;
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -52,7 +52,7 @@
 
     button, input { font: inherit; }
     [hidden] { display: none !important; }
-    .shell { position: relative; width: min(100%, 470px); padding: 36px 20px; }
+    .shell { position: relative; width: min(100%, 470px); padding: 20px 20px 36px; }
     .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 22px; }
 
     .brand-mark {
@@ -180,11 +180,24 @@
     .result strong { display: block; margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: clamp(25px, 7vw, 31px); letter-spacing: .1em; }
     .copy { width: 44px; height: 44px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid rgba(112, 238, 166, .21); border-radius: 12px; color: #9cf3bf; cursor: pointer; background: rgba(65, 221, 130, .06); }
     .copy svg { width: 19px; height: 19px; }
+    .downloader-info { display: grid; grid-template-columns: 58px 1fr; gap: 13px; margin-top: 22px; border-top: 1px solid var(--line); padding-top: 18px; }
+    .downloader-icon { width: 58px; height: 58px; border-radius: 14px; object-fit: cover; box-shadow: 0 10px 24px rgba(0, 0, 0, .28); }
+    .downloader-content h2 { margin: 0; font-size: 16px; }
+    .downloader-content > p { margin: 4px 0 11px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .downloader-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; border: 1px solid rgba(118, 231, 163, .16); border-radius: 10px; padding: 7px 8px 7px 10px; background: rgba(1, 18, 10, .42); }
+    .downloader-row + .downloader-row { margin-top: 7px; }
+    .downloader-row small { display: block; color: rgba(128, 236, 173, .62); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .downloader-value { display: block; margin-top: 1px; color: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; font-weight: 750; letter-spacing: .08em; }
+    .downloader-link { display: block; margin-top: 2px; color: #8df0b5; font-size: 12px; text-decoration: none; overflow-wrap: anywhere; }
+    .mini-copy { min-width: 62px; min-height: 28px; flex: 0 0 auto; border: 1px solid rgba(112, 238, 166, .23); border-radius: 8px; padding: 5px 8px; color: #aaf5c8; font-size: 11px; font-weight: 700; cursor: pointer; background: rgba(65, 221, 130, .07); }
+    .mini-copy:hover { background: rgba(65, 221, 130, .14); }
     .footnote { margin: 16px 0 0; text-align: center; color: rgba(182, 226, 199, .48); font-size: 12px; line-height: 1.5; }
 
     @media (max-width: 390px) {
       .card { padding: 23px 18px; }
       .code-input { letter-spacing: .1em; }
+      .downloader-info { grid-template-columns: 46px 1fr; gap: 10px; }
+      .downloader-icon { width: 46px; height: 46px; border-radius: 11px; }
     }
   </style>
 </head>
@@ -215,7 +228,7 @@
       <div class="topline">
         <div>
           <h1>Gerar senha</h1>
-          <p class="lead">Informe os 8 dígitos mostrados na televisão.</p>
+          <p id="welcome-message" class="lead">Informe os 8 dígitos mostrados na televisão.</p>
         </div>
         <button id="logout-button" class="link-button" type="button">Sair</button>
       </div>
@@ -231,6 +244,22 @@
           </button>
         </div>
       </form>
+
+      <section class="downloader-info" aria-labelledby="downloader-title">
+        <img class="downloader-icon" src="downloader-icon.png" alt="Ícone do aplicativo Downloader">
+        <div class="downloader-content">
+          <h2 id="downloader-title">Baixar o ativador</h2>
+          <p>Use o código no aplicativo Downloader ou abra o link direto.</p>
+          <div class="downloader-row">
+            <div><small>Código Downloader</small><strong class="downloader-value">1729924</strong></div>
+            <button class="mini-copy" type="button" data-copy-value="1729924">Copiar</button>
+          </div>
+          <div class="downloader-row">
+            <div><small>Link direto</small><a class="downloader-link" href="http://aftv.news/1729924" target="_blank" rel="noopener">aftv.news/1729924</a></div>
+            <button class="mini-copy" type="button" data-copy-value="http://aftv.news/1729924">Copiar link</button>
+          </div>
+        </div>
+      </section>
     </section>
 
     <p class="footnote">A autorização é consultada diretamente na sua mensalidade.</p>
@@ -269,6 +298,22 @@
 
     async function sha256Hex(value) {
       return bytesToHex(await sha256Bytes(value));
+    }
+
+    async function copyText(value) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+        return;
+      }
+      const helper = document.createElement("textarea");
+      helper.value = value;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      document.execCommand("copy");
+      helper.remove();
     }
 
     async function loadAccessFile() {
@@ -394,10 +439,19 @@
     });
 
     document.getElementById("copy-button").addEventListener("click", async event => {
-      await navigator.clipboard.writeText(activationCode.textContent.replace("-", ""));
+      await copyText(activationCode.textContent.replace("-", ""));
       const original = event.currentTarget.innerHTML;
       event.currentTarget.textContent = "✓";
       setTimeout(() => { event.currentTarget.innerHTML = original; }, 1400);
+    });
+
+    document.querySelectorAll("[data-copy-value]").forEach(button => {
+      button.addEventListener("click", async () => {
+        await copyText(button.dataset.copyValue);
+        const original = button.textContent;
+        button.textContent = "Copiado";
+        setTimeout(() => { button.textContent = original; }, 1400);
+      });
     });
 
     document.getElementById("logout-button").addEventListener("click", () => logout());
