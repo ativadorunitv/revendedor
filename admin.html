@@ -364,6 +364,7 @@
               <button class="button secondary small save-name" type="button">Salvar nome</button>
               <button class="button secondary small new-password" type="button">Nova senha</button>
               <button class="button ${record.bloqueado ? "secondary" : "warning"} small toggle-access" type="button">${record.bloqueado ? "Desbloquear" : "Bloquear"}</button>
+              <button class="button danger small delete-user" type="button">Excluir</button>
             </div>
           </div>
         </article>
@@ -422,6 +423,15 @@
       const index = Number(card.dataset.index);
       const record = accessFile.senhas[index];
       if (!record) return;
+
+      if (button.classList.contains("delete-user")) {
+        const confirmed = confirm(`Excluir o cliente “${record.nome}”? Após publicar o JSON, essa senha deixará de funcionar.`);
+        if (!confirmed) return;
+        accessFile.senhas.splice(index, 1);
+        renderUsers();
+        markChanged(`Cliente ${record.nome} excluído. Baixe e publique o JSON atualizado.`);
+        return;
+      }
 
       if (button.classList.contains("copy-user-password")) {
         if (!record.senha) return;
