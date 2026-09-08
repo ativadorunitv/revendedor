@@ -1,18 +1,22 @@
 {
-  "versao": 2,
+  "versao": 3,
   "atualizadoEm": "2026-09-08T15:51:27.841Z",
   "senhas": [
     {
       "id": "cliente-inicial",
       "nome": "Cliente inicial",
       "hashSha256": "b062486a16b921163bd9deb25886c6e5d4bd735615fe96ac764e895899ab28ea",
-      "bloqueado": false
+      "bloqueado": false,
+      "senhaCriptografada": "YnXZDhs204Z8jT2EpOFHYtHJ4kWWRA==",
+      "iv": "0UnBuGwYSWvFl/Fh"
     },
     {
       "id": "cliente-mtsuk3v7-7d1qb7",
       "nome": "Zayan Doux",
       "hashSha256": "85b72736edb76cff652cf35cc35acea337dd27703bcc9ecf94226186efe72cbc",
-      "bloqueado": false
+      "bloqueado": false,
+      "senhaCriptografada": "hNfKAAt1sNLAd5BCZ7sGW7puXOvrxg==",
+      "iv": "jjFwCcmzMjVgL5P0"
     }
   ]
 }

@@ -114,6 +114,8 @@
     .user-main { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 12px; }
     .user-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
     .user-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--muted); font-size: 12px; }
+    .saved-password { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+    .saved-password strong { min-width: 75px; color: #e9fff1; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; letter-spacing: .12em; }
     .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
     .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .badge.active { color: #80efae; background: rgba(54, 198, 115, .11); }
@@ -212,11 +214,13 @@
   <script>
     const PUBLIC_JSON_URL = "https://ativadorunitv.github.io/revendedor/senhas.json";
     const ADMIN_PASSWORD_HASH = "2ac7b16e169b443e2ce02523bc29454c582d445bb785b6ca95cc15e44e60bf16";
-    const ADMIN_SESSION_KEY = "unitv-admin-authenticated";
+    const ADMIN_KEY_SALT = "unitv-admin-password-v1";
+    const ADMIN_KEY_ITERATIONS = 200000;
 
     let accessFile = null;
     let generatedPassword = "";
     let hasChanges = false;
+    let adminCryptoKey = null;
 
     const adminLogin = document.getElementById("admin-login");
     const adminPanel = document.getElementById("admin-panel");
@@ -239,6 +243,70 @@
       return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
     }
 
+    async function deriveAdminKey(password) {
+      const material = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password.normalize("NFKC")),
+        "PBKDF2",
+        false,
+        ["deriveKey"]
+      );
+      return crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt: new TextEncoder().encode(ADMIN_KEY_SALT),
+          iterations: ADMIN_KEY_ITERATIONS,
+          hash: "SHA-256"
+        },
+        material,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = "";
+      bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+      return btoa(binary);
+    }
+
+    function base64ToBytes(value) {
+      const binary = atob(value);
+      return Uint8Array.from(binary, character => character.charCodeAt(0));
+    }
+
+    async function encryptPassword(password) {
+      if (!adminCryptoKey) throw new Error("Entre novamente na área administrativa.");
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encrypted = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        adminCryptoKey,
+        new TextEncoder().encode(password)
+      );
+      return {
+        senhaCriptografada: bytesToBase64(new Uint8Array(encrypted)),
+        iv: bytesToBase64(iv)
+      };
+    }
+
+    async function decryptPassword(record) {
+      if (!adminCryptoKey) throw new Error("Entre novamente na área administrativa.");
+      if (!record.senhaCriptografada || !record.iv) {
+        throw new Error("Esta senha antiga não pode ser recuperada. Gere uma nova senha para o cliente.");
+      }
+      try {
+        const decrypted = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: base64ToBytes(record.iv) },
+          adminCryptoKey,
+          base64ToBytes(record.senhaCriptografada)
+        );
+        return new TextDecoder().decode(decrypted);
+      } catch {
+        throw new Error("Não foi possível revelar esta senha.");
+      }
+    }
+
     function showMessage(element, text, success = false) {
       element.textContent = text;
       element.classList.toggle("show", Boolean(text));
@@ -251,7 +319,9 @@
         id: String(record.id || `cliente-${index + 1}`),
         nome: String(record.nome || `Cliente ${index + 1}`),
         hashSha256: String(record.hashSha256 || "").toLowerCase(),
-        bloqueado: record.bloqueado === true || record.ativo === false
+        bloqueado: record.bloqueado === true || record.ativo === false,
+        senhaCriptografada: typeof record.senhaCriptografada === "string" ? record.senhaCriptografada : null,
+        iv: typeof record.iv === "string" ? record.iv : null
       }));
       return data;
     }
@@ -356,6 +426,11 @@
               <button class="button ${record.bloqueado ? "secondary" : "warning"} small toggle-access" type="button">${record.bloqueado ? "Desbloquear" : "Bloquear"}</button>
             </div>
           </div>
+          <div class="saved-password">
+            <span>Senha:</span>
+            <strong class="saved-password-value">••••••</strong>
+            <button class="button secondary small show-password" type="button" ${record.senhaCriptografada && record.iv ? "" : "disabled"}>${record.senhaCriptografada && record.iv ? "Ver senha" : "Indisponível"}</button>
+          </div>
         </article>
       `).join("");
     }
@@ -365,9 +440,10 @@
       adminLoginButton.disabled = true;
       showMessage(adminLoginMessage, "");
       try {
-        const hash = await sha256Hex(adminPassword.value);
+        const enteredPassword = adminPassword.value;
+        const hash = await sha256Hex(enteredPassword);
         if (hash !== ADMIN_PASSWORD_HASH) throw new Error("Senha do administrador incorreta.");
-        sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
+        adminCryptoKey = await deriveAdminKey(enteredPassword);
         adminPassword.value = "";
         adminLogin.hidden = true;
         adminPanel.hidden = false;
@@ -387,11 +463,14 @@
       createButton.disabled = true;
       try {
         const credentials = await createUniquePassword();
+        const protectedPassword = await encryptPassword(credentials.password);
         accessFile.senhas.push({
           id: createRecordId(),
           nome: name,
           hashSha256: credentials.hash,
-          bloqueado: false
+          bloqueado: false,
+          senhaCriptografada: protectedPassword.senhaCriptografada,
+          iv: protectedPassword.iv
         });
         showGeneratedPassword(credentials.password, `Senha criada para ${name}`);
         nameInput.value = "";
@@ -411,6 +490,27 @@
       const index = Number(card.dataset.index);
       const record = accessFile.senhas[index];
       if (!record) return;
+
+      if (button.classList.contains("show-password")) {
+        const passwordValue = card.querySelector(".saved-password-value");
+        if (button.dataset.visible === "true") {
+          passwordValue.textContent = "••••••";
+          button.textContent = "Ver senha";
+          button.dataset.visible = "false";
+          return;
+        }
+        button.disabled = true;
+        try {
+          passwordValue.textContent = await decryptPassword(record);
+          button.textContent = "Ocultar";
+          button.dataset.visible = "true";
+        } catch (error) {
+          showMessage(panelMessage, error.message || "Não foi possível revelar a senha.");
+        } finally {
+          button.disabled = false;
+        }
+        return;
+      }
 
       if (button.classList.contains("save-name")) {
         const name = card.querySelector(".user-name").value.trim();
@@ -434,8 +534,11 @@
         button.disabled = true;
         try {
           const credentials = await createUniquePassword();
+          const protectedPassword = await encryptPassword(credentials.password);
           record.hashSha256 = credentials.hash;
           record.bloqueado = false;
+          record.senhaCriptografada = protectedPassword.senhaCriptografada;
+          record.iv = protectedPassword.iv;
           showGeneratedPassword(credentials.password, `Nova senha para ${record.nome}`);
           renderUsers();
           markChanged("Senha alterada. A senha anterior deixará de funcionar após publicar o JSON.");
@@ -457,13 +560,15 @@
     downloadButton.addEventListener("click", () => {
       if (!accessFile) return;
       const updated = {
-        versao: 2,
+        versao: 3,
         atualizadoEm: new Date().toISOString(),
         senhas: accessFile.senhas.map(record => ({
           id: record.id,
           nome: record.nome,
           hashSha256: record.hashSha256,
-          bloqueado: record.bloqueado
+          bloqueado: record.bloqueado,
+          senhaCriptografada: record.senhaCriptografada,
+          iv: record.iv
         }))
       };
       const blob = new Blob([JSON.stringify(updated, null, 2) + "\n"], { type: "application/json" });
@@ -482,9 +587,9 @@
 
     document.getElementById("admin-logout-button").addEventListener("click", () => {
       if (hasChanges && !confirm("As alterações ainda não foram baixadas. Deseja sair mesmo assim?")) return;
-      sessionStorage.removeItem(ADMIN_SESSION_KEY);
       accessFile = null;
       hasChanges = false;
+      adminCryptoKey = null;
       adminPanel.hidden = true;
       adminLogin.hidden = false;
       showMessage(adminLoginMessage, "");
@@ -496,12 +601,6 @@
       event.preventDefault();
       event.returnValue = "";
     });
-
-    if (sessionStorage.getItem(ADMIN_SESSION_KEY) === "1") {
-      adminLogin.hidden = true;
-      adminPanel.hidden = false;
-      loadPublishedJson();
-    }
 
     document.documentElement.dataset.appReady = "true";
   </script>
