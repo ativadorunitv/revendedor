@@ -3,25 +3,25 @@ package com.ativadorunitv.revendedor;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.ClipData;
-import android.content.ClipboardManager;
-import android.content.Context;
+import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.InputFilter;
 import android.text.InputType;
-import android.text.method.PasswordTransformationMethod;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -29,7 +29,9 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.GridLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -59,6 +61,7 @@ import java.util.zip.ZipFile;
 
 public final class MainActivity extends Activity {
     private static final String IDS_JSON_URL = "https://ativadorunitv.github.io/revendedor/ids.json";
+    private static final String UPDATE_JSON_URL = "https://ativadorunitv.github.io/revendedor/ativador/update.json";
     private static final String UNITV_APK_URL = "https://ativadorunitv.github.io/revendedor/unitv-free/5.8.1.apk";
     private static final String DRIVE_PREFIX = "https://drive.google.com/uc?export=download&id=";
     private static final String ACTIVATION_NAMESPACE = "unitv-activation-v1|U7vF-93aL-2026|";
@@ -71,9 +74,19 @@ public final class MainActivity extends Activity {
     private TextView statusText;
     private Button activateButton;
     private Button cleanupButton;
+    private Dialog progressDialog;
+    private TextView progressTitle;
+    private TextView progressMessage;
+    private ProgressBar progressSpinner;
+    private Button progressClose;
     private String currentPage = "";
     private String deviceCode;
     private volatile boolean busy;
+    private boolean activityResumed;
+    private boolean permissionLaunched;
+    private boolean permissionRetryShown;
+    private long permissionLaunchTime;
+    private boolean updateChecked;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -87,43 +100,72 @@ public final class MainActivity extends Activity {
         root.setBackground(screenBackground());
         setContentView(root);
         deviceCode = createDeviceCode();
-        root.postDelayed(this::refreshPermissionFlow, 180L);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        activityResumed = true;
         if (root != null) {
-            root.postDelayed(this::refreshPermissionFlow, 240L);
+            root.postDelayed(this::refreshPermissionFlow, 180L);
         }
     }
 
     @Override
+    protected void onPause() {
+        activityResumed = false;
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
+        dismissProgressDialog();
         worker.shutdownNow();
         super.onDestroy();
     }
 
     private void refreshPermissionFlow() {
-        if (!hasStorageAccess()) {
-            showPermissionPage();
-        } else {
-            showMainPage();
+        if (!activityResumed) {
+            return;
         }
+        if (!hasStorageAccess()) {
+            showPermissionWaiting();
+            if (!permissionLaunched) {
+                permissionLaunched = true;
+                permissionLaunchTime = SystemClock.elapsedRealtime();
+                root.postDelayed(this::requestStoragePermission, 120L);
+            } else if (!permissionRetryShown
+                    && SystemClock.elapsedRealtime() - permissionLaunchTime > 900L) {
+                permissionRetryShown = true;
+                showPermissionRetryDialog();
+            }
+            return;
+        }
+
+        permissionLaunched = false;
+        permissionRetryShown = false;
+        showMainPage();
+        checkForUpdateOnce();
     }
 
     private boolean hasStorageAccess() {
         if (Build.VERSION.SDK_INT >= 30) {
             return Environment.isExternalStorageManager();
         }
-        return Build.VERSION.SDK_INT < 23 || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        return Build.VERSION.SDK_INT < 23
+                || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestStoragePermission() {
+        if (!activityResumed) {
+            return;
+        }
         try {
             if (Build.VERSION.SDK_INT >= 30) {
-                Intent appPermission = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                        Uri.parse("package:" + getPackageName()));
+                Intent appPermission = new Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:" + getPackageName())
+                );
                 if (appPermission.resolveActivity(getPackageManager()) != null) {
                     startActivity(appPermission);
                 } else {
@@ -136,53 +178,63 @@ public final class MainActivity extends Activity {
                 }, REQUEST_STORAGE);
             }
         } catch (Exception error) {
+            permissionLaunched = false;
             Toast.makeText(this, "Não foi possível abrir a permissão de arquivos.", Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void showPermissionWaiting() {
+        if ("permission-waiting".equals(currentPage)) {
+            return;
+        }
+        currentPage = "permission-waiting";
+        root.removeAllViews();
+
+        LinearLayout waiting = new LinearLayout(this);
+        waiting.setOrientation(LinearLayout.VERTICAL);
+        waiting.setGravity(Gravity.CENTER);
+
+        ProgressBar spinner = new ProgressBar(this);
+        if (Build.VERSION.SDK_INT >= 21) {
+            spinner.setIndeterminateTintList(ColorStateList.valueOf(Color.rgb(103, 233, 158)));
+        }
+        waiting.addView(spinner, size(dp(48), dp(48)));
+
+        TextView message = text("Abrindo acesso aos arquivos…", 15, Color.rgb(185, 216, 198), false);
+        message.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams messageParams = wrap();
+        messageParams.topMargin = dp(12);
+        waiting.addView(message, messageParams);
+
+        root.addView(waiting, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+    }
+
+    private void showPermissionRetryDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Permissão necessária")
+                .setMessage("Autorize o acesso aos arquivos para continuar.")
+                .setCancelable(false)
+                .setNegativeButton("Sair", (dialog, which) -> finish())
+                .setPositiveButton("Tentar novamente", (dialog, which) -> {
+                    permissionRetryShown = false;
+                    permissionLaunched = true;
+                    permissionLaunchTime = SystemClock.elapsedRealtime();
+                    requestStoragePermission();
+                })
+                .show();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_STORAGE) {
+            permissionLaunched = true;
+            permissionLaunchTime = SystemClock.elapsedRealtime() - 1_000L;
             root.postDelayed(this::refreshPermissionFlow, 120L);
         }
-    }
-
-    private void showPermissionPage() {
-        if ("permission".equals(currentPage)) {
-            return;
-        }
-        currentPage = "permission";
-        root.removeAllViews();
-
-        LinearLayout card = card();
-        card.setGravity(Gravity.CENTER_HORIZONTAL);
-
-        TextView symbol = text("▣", 42, Color.rgb(103, 233, 158), true);
-        symbol.setGravity(Gravity.CENTER);
-        card.addView(symbol, size(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)));
-
-        TextView eyebrow = text("ACESSO NECESSÁRIO", 13, Color.rgb(103, 233, 158), true);
-        eyebrow.setGravity(Gravity.CENTER);
-        card.addView(eyebrow, wrap());
-
-        TextView title = text("Permissão de arquivos", 25, Color.WHITE, true);
-        title.setGravity(Gravity.CENTER);
-        title.setPadding(0, dp(8), 0, 0);
-        card.addView(title, wrap());
-
-        TextView description = text("O ativador precisa acessar os arquivos do aparelho para copiar e limpar a configuração.", 16, Color.rgb(185, 216, 198), false);
-        description.setGravity(Gravity.CENTER);
-        description.setLineSpacing(dp(3), 1f);
-        description.setPadding(0, dp(12), 0, dp(20));
-        card.addView(description, wrap());
-
-        Button allow = actionButton("Conceder permissão", true);
-        allow.setOnClickListener(view -> requestStoragePermission());
-        card.addView(allow, size(dp(260), dp(48)));
-
-        addCenteredCard(card);
-        allow.requestFocus();
     }
 
     private void showMainPage() {
@@ -195,73 +247,173 @@ public final class MainActivity extends Activity {
         LinearLayout card = card();
         card.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        TextView brand = text("UniTV Free", 29, Color.WHITE, true);
+        TextView brand = text("UniTV Free", 27, Color.WHITE, true);
         brand.setGravity(Gravity.CENTER);
         card.addView(brand, wrap());
 
-        TextView subtitle = text("Ativador", 14, Color.rgb(132, 219, 169), true);
+        TextView subtitle = text("Ativador", 13, Color.rgb(132, 219, 169), true);
         subtitle.setGravity(Gravity.CENTER);
-        subtitle.setPadding(0, dp(2), 0, dp(18));
+        subtitle.setPadding(0, dp(1), 0, dp(14));
         card.addView(subtitle, wrap());
 
-        TextView deviceLabel = text("CÓDIGO DESTE DISPOSITIVO", 12, Color.rgb(152, 194, 169), true);
+        TextView deviceLabel = text("CÓDIGO DESTE DISPOSITIVO", 11, Color.rgb(152, 194, 169), true);
         deviceLabel.setGravity(Gravity.CENTER);
         card.addView(deviceLabel, wrap());
 
-        TextView deviceValue = text(formatEight(deviceCode), 30, Color.WHITE, true);
+        TextView deviceValue = text(formatEight(deviceCode), 28, Color.WHITE, true);
         deviceValue.setGravity(Gravity.CENTER);
         deviceValue.setLetterSpacing(.12f);
         deviceValue.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         deviceValue.setBackground(round(Color.rgb(5, 27, 16), 12, Color.rgb(65, 143, 96), 1));
-        deviceValue.setPadding(dp(16), 0, dp(16), 0);
-        LinearLayout.LayoutParams deviceParams = size(ViewGroup.LayoutParams.MATCH_PARENT, dp(58));
-        deviceParams.bottomMargin = dp(8);
+        deviceValue.setPadding(dp(12), 0, dp(12), 0);
+        LinearLayout.LayoutParams deviceParams = size(ViewGroup.LayoutParams.MATCH_PARENT, dp(54));
+        deviceParams.bottomMargin = dp(16);
         card.addView(deviceValue, deviceParams);
 
-        Button copyCode = actionButton("Copiar código", false);
-        copyCode.setOnClickListener(view -> copyDeviceCode());
-        LinearLayout.LayoutParams copyParams = size(dp(170), dp(38));
-        copyParams.bottomMargin = dp(18);
-        card.addView(copyCode, copyParams);
-
-        TextView inputLabel = text("Senha de ativação", 14, Color.rgb(225, 246, 233), true);
+        TextView inputLabel = text("Senha de ativação", 13, Color.rgb(225, 246, 233), true);
         inputLabel.setGravity(Gravity.START);
         card.addView(inputLabel, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         activationInput = new EditText(this);
         activationInput.setSingleLine(true);
         activationInput.setTextColor(Color.WHITE);
-        activationInput.setTextSize(22f);
+        activationInput.setTextSize(21f);
         activationInput.setGravity(Gravity.CENTER);
         activationInput.setLetterSpacing(.16f);
         activationInput.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         activationInput.setHint("00000000");
         activationInput.setHintTextColor(Color.rgb(87, 125, 103));
-        activationInput.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        activationInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        activationInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        activationInput.setShowSoftInputOnFocus(false);
+        activationInput.setCursorVisible(false);
+        activationInput.setLongClickable(false);
         activationInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8)});
         activationInput.setBackground(round(Color.rgb(4, 23, 13), 11, Color.rgb(65, 143, 96), 1));
-        card.addView(activationInput, size(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+        activationInput.setOnClickListener(view -> showNumericKeypad());
+        activationInput.setOnKeyListener((view, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_UP
+                    && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                showNumericKeypad();
+                return true;
+            }
+            return false;
+        });
+        card.addView(activationInput, size(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
 
         activateButton = actionButton("Ativar", true);
         activateButton.setOnClickListener(view -> startActivation());
-        LinearLayout.LayoutParams activateParams = size(dp(230), dp(46));
-        activateParams.topMargin = dp(15);
+        LinearLayout.LayoutParams activateParams = size(dp(205), dp(44));
+        activateParams.topMargin = dp(13);
         card.addView(activateButton, activateParams);
 
         cleanupButton = actionButton("Limpeza", false);
         cleanupButton.setOnClickListener(view -> confirmCleanup());
-        LinearLayout.LayoutParams cleanupParams = size(dp(180), dp(40));
-        cleanupParams.topMargin = dp(9);
+        LinearLayout.LayoutParams cleanupParams = size(dp(160), dp(38));
+        cleanupParams.topMargin = dp(8);
         card.addView(cleanupButton, cleanupParams);
 
-        statusText = text("Digite a senha gerada no site.", 14, Color.rgb(164, 207, 181), false);
+        statusText = text("", 13, Color.rgb(164, 207, 181), false);
         statusText.setGravity(Gravity.CENTER);
-        statusText.setPadding(0, dp(16), 0, 0);
+        statusText.setPadding(0, dp(12), 0, 0);
+        statusText.setVisibility(View.GONE);
         card.addView(statusText, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         addCenteredCard(card);
         activationInput.requestFocus();
+    }
+
+    private void showNumericKeypad() {
+        if (busy || activationInput == null) {
+            return;
+        }
+
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCancelable(true);
+
+        LinearLayout panel = modalPanel();
+        panel.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        TextView title = text("Senha de ativação", 18, Color.WHITE, true);
+        title.setGravity(Gravity.CENTER);
+        panel.addView(title, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        StringBuilder digits = new StringBuilder(digitsOnly(activationInput.getText().toString()));
+        TextView display = text(digits.length() == 0 ? "00000000" : digits.toString(), 25, Color.WHITE, true);
+        display.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        display.setLetterSpacing(.13f);
+        display.setGravity(Gravity.CENTER);
+        display.setBackground(round(Color.rgb(4, 23, 13), 10, Color.rgb(65, 143, 96), 1));
+        LinearLayout.LayoutParams displayParams = size(ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        displayParams.topMargin = dp(12);
+        displayParams.bottomMargin = dp(10);
+        panel.addView(display, displayParams);
+
+        GridLayout keypad = new GridLayout(this);
+        keypad.setColumnCount(3);
+        keypad.setRowCount(4);
+        keypad.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        keypad.setUseDefaultMargins(false);
+        panel.addView(keypad, wrap());
+
+        String[] keys = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"};
+        Button firstButton = null;
+        for (String key : keys) {
+            Button keyButton = actionButton(key, "OK".equals(key));
+            keyButton.setTextSize("⌫".equals(key) ? 21f : 18f);
+            GridLayout.LayoutParams keyParams = new GridLayout.LayoutParams();
+            keyParams.width = dp(78);
+            keyParams.height = dp(48);
+            keyParams.setMargins(dp(4), dp(4), dp(4), dp(4));
+            keypad.addView(keyButton, keyParams);
+
+            if (firstButton == null) {
+                firstButton = keyButton;
+            }
+
+            keyButton.setOnClickListener(view -> {
+                if ("⌫".equals(key)) {
+                    if (digits.length() > 0) {
+                        digits.deleteCharAt(digits.length() - 1);
+                    }
+                } else if ("OK".equals(key)) {
+                    if (digits.length() != 8) {
+                        Toast.makeText(this, "Digite os 8 números.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    activationInput.setText(digits.toString());
+                    activationInput.setSelection(activationInput.length());
+                    dialog.dismiss();
+                    activateButton.requestFocus();
+                    return;
+                } else if (digits.length() < 8) {
+                    digits.append(key);
+                }
+                display.setText(digits.length() == 0 ? "00000000" : digits.toString());
+            });
+
+            if ("⌫".equals(key)) {
+                keyButton.setOnLongClickListener(view -> {
+                    digits.setLength(0);
+                    display.setText("00000000");
+                    return true;
+                });
+            }
+        }
+
+        dialog.setContentView(panel);
+        dialog.show();
+        Window dialogWindow = dialog.getWindow();
+        if (dialogWindow != null) {
+            dialogWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            dialogWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            dialogWindow.setLayout(Math.min(dp(310), screenWidth - dp(28)), ViewGroup.LayoutParams.WRAP_CONTENT);
+            dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        if (firstButton != null) {
+            firstButton.requestFocus();
+        }
     }
 
     private void startActivation() {
@@ -270,41 +422,57 @@ public final class MainActivity extends Activity {
         }
         if (!hasStorageAccess()) {
             currentPage = "";
-            showPermissionPage();
+            permissionLaunched = false;
+            refreshPermissionFlow();
             return;
         }
 
         String entered = digitsOnly(activationInput.getText().toString());
         if (entered.length() != 8 || !activationCode(deviceCode).equals(entered)) {
             setStatus("Senha inválida. Confira os 8 números.", true);
-            activationInput.selectAll();
+            showNumericKeypad();
             return;
         }
 
         setBusy(true);
-        setStatus("Baixando e aplicando a configuração...", false);
+        setStatus("", false);
+        showProgressDialog("Ativando Unitv Free", "Aplicando a configuração deste aparelho.");
         worker.execute(() -> {
             try {
                 downloadAndActivateConfig();
-                runOnUiThread(() -> setStatus("Ativado. Baixando UniTV Free 5.8.1...", false));
-                File apk = downloadApk();
+                runOnUiThread(() -> updateProgressDialog(
+                        "Baixando Unitv Free",
+                        "Aguarde enquanto o aplicativo é baixado."
+                ));
+                File apk = downloadApkFromUrl(
+                        UNITV_APK_URL,
+                        "UnitvFree-5.8.1.apk",
+                        1024 * 1024,
+                        "O APK do UniTV Free baixado é inválido."
+                );
                 runOnUiThread(() -> {
                     setBusy(false);
-                    setStatus("Ativação concluída. Abrindo o instalador...", false);
-                    Toast.makeText(this, "UniTV Free ativado com sucesso.", Toast.LENGTH_LONG).show();
-                    openPackageInstaller(apk);
+                    updateProgressDialog("Download concluído", "Abrindo o instalador.");
+                    root.postDelayed(() -> {
+                        dismissProgressDialog();
+                        openPackageInstaller(apk, "Ativado, mas não foi possível abrir o instalador.");
+                    }, 650L);
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     setBusy(false);
-                    setStatus(friendlyError(error), true);
+                    showProgressError(friendlyError(error));
                 });
             }
         });
     }
 
     private void downloadAndActivateConfig() throws Exception {
-        List<String> ids = parseIds(readText(IDS_JSON_URL, 4 * 1024 * 1024));
+        List<String> ids = parseIds(readText(
+                IDS_JSON_URL,
+                4 * 1024 * 1024,
+                "Não foi possível ler o ids.json publicado."
+        ));
         if (ids.isEmpty()) {
             throw new IOException("Nenhuma configuração foi encontrada no ids.json.");
         }
@@ -363,7 +531,8 @@ public final class MainActivity extends Activity {
         return matcher.find() ? matcher.group(1) : "t";
     }
 
-    private File downloadApk() throws Exception {
+    private File downloadApkFromUrl(String address, String fileName, int minimumBytes, String invalidMessage)
+            throws Exception {
         File directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
         if (directory == null) {
             directory = getFilesDir();
@@ -371,14 +540,16 @@ public final class MainActivity extends Activity {
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IOException("A pasta de download não está disponível.");
         }
-        File partial = new File(directory, "UnitvFree-5.8.1.apk.part");
-        File output = new File(directory, "UnitvFree-5.8.1.apk");
-        HttpURLConnection connection = open(UNITV_APK_URL);
+
+        File partial = new File(directory, fileName + ".part");
+        File output = new File(directory, fileName);
+        HttpURLConnection connection = open(address);
         try {
             if (connection.getResponseCode() >= 400) {
-                throw new IOException("Não foi possível baixar o UniTV Free.");
+                throw new IOException("Não foi possível baixar o aplicativo.");
             }
-            try (InputStream input = connection.getInputStream(); FileOutputStream stream = new FileOutputStream(partial, false)) {
+            try (InputStream input = connection.getInputStream();
+                 FileOutputStream stream = new FileOutputStream(partial, false)) {
                 byte[] buffer = new byte[32 * 1024];
                 int read;
                 while ((read = input.read(buffer)) != -1) {
@@ -392,8 +563,9 @@ public final class MainActivity extends Activity {
         } finally {
             connection.disconnect();
         }
-        if (partial.length() < 1024 * 1024) {
-            throw new IOException("O APK baixado é inválido.");
+
+        if (partial.length() < minimumBytes) {
+            throw new IOException(invalidMessage);
         }
         if (output.exists() && !output.delete()) {
             throw new IOException("Não foi possível substituir o APK anterior.");
@@ -403,21 +575,107 @@ public final class MainActivity extends Activity {
         }
         try (ZipFile zip = new ZipFile(output)) {
             if (zip.getEntry("AndroidManifest.xml") == null) {
-                throw new IOException("O arquivo baixado não é um APK válido.");
+                throw new IOException(invalidMessage);
             }
         }
         return output;
     }
 
-    private void openPackageInstaller(File apk) {
+    private void openPackageInstaller(File apk, String failureMessage) {
         try {
             Intent install = new Intent(Intent.ACTION_VIEW);
             install.setDataAndType(ApkFileProvider.uriFor(apk.getName()), "application/vnd.android.package-archive");
             install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(install);
         } catch (Exception error) {
-            setStatus("Ativado, mas não foi possível abrir o instalador.", true);
+            setStatus(failureMessage, true);
         }
+    }
+
+    private void checkForUpdateOnce() {
+        if (updateChecked) {
+            return;
+        }
+        updateChecked = true;
+        worker.execute(() -> {
+            try {
+                JSONObject json = new JSONObject(readText(
+                        UPDATE_JSON_URL,
+                        128 * 1024,
+                        "Não foi possível verificar atualizações."
+                ));
+                UpdateInfo update = new UpdateInfo(
+                        json.optInt("versionCode", 0),
+                        json.optString("versionName", ""),
+                        json.optString("apkUrl", "").trim(),
+                        json.optBoolean("obrigatoria", false),
+                        json.optString("mensagem", "Uma nova versão está disponível.")
+                );
+                if (update.versionCode > BuildConfig.VERSION_CODE && update.apkUrl.startsWith("https://")) {
+                    runOnUiThread(() -> showUpdateAvailable(update));
+                }
+            } catch (Exception ignored) {
+                // A falha silenciosa mantém o ativador disponível mesmo sem internet.
+            }
+        });
+    }
+
+    private void showUpdateAvailable(UpdateInfo update) {
+        if (isFinishing()) {
+            return;
+        }
+        if (busy) {
+            updateChecked = false;
+            root.postDelayed(this::checkForUpdateOnce, 2_000L);
+            return;
+        }
+        String version = update.versionName.isEmpty() ? "" : "\n\nVersão: " + update.versionName;
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle("Atualização disponível")
+                .setMessage(update.message + version)
+                .setCancelable(!update.mandatory)
+                .setPositiveButton("Atualizar", (dialog, which) -> startAppUpdate(update));
+        if (!update.mandatory) {
+            builder.setNegativeButton("Depois", null);
+        }
+        AlertDialog dialog = builder.create();
+        dialog.setCanceledOnTouchOutside(!update.mandatory);
+        dialog.show();
+    }
+
+    private void startAppUpdate(UpdateInfo update) {
+        if (busy) {
+            return;
+        }
+        setBusy(true);
+        showProgressDialog("Baixando atualização", "Aguarde enquanto a nova versão é baixada.");
+        worker.execute(() -> {
+            try {
+                String safeVersion = update.versionName.replaceAll("[^0-9A-Za-z._-]", "");
+                if (safeVersion.isEmpty()) {
+                    safeVersion = String.valueOf(update.versionCode);
+                }
+                File apk = downloadApkFromUrl(
+                        update.apkUrl,
+                        "Ativador-Unitv-Free-" + safeVersion + ".apk",
+                        200 * 1024,
+                        "A atualização baixada é inválida."
+                );
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    updateProgressDialog("Atualização pronta", "Abrindo o instalador.");
+                    root.postDelayed(() -> {
+                        dismissProgressDialog();
+                        openPackageInstaller(apk, "Não foi possível abrir a atualização.");
+                    }, 650L);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    setBusy(false);
+                    showProgressError(friendlyError(error));
+                });
+            }
+        });
     }
 
     private void confirmCleanup() {
@@ -434,7 +692,7 @@ public final class MainActivity extends Activity {
 
     private void runCleanup() {
         setBusy(true);
-        setStatus("Removendo configurações...", false);
+        setStatus("Removendo configurações…", false);
         worker.execute(() -> {
             File storage = Environment.getExternalStorageDirectory();
             boolean success = deleteRecursively(new File(storage, ".config"));
@@ -444,7 +702,10 @@ public final class MainActivity extends Activity {
             boolean finalSuccess = success;
             runOnUiThread(() -> {
                 setBusy(false);
-                setStatus(finalSuccess ? "Limpeza concluída." : "Alguns arquivos não puderam ser removidos.", !finalSuccess);
+                setStatus(
+                        finalSuccess ? "Limpeza concluída." : "Alguns arquivos não puderam ser removidos.",
+                        !finalSuccess
+                );
             });
         });
     }
@@ -479,7 +740,7 @@ public final class MainActivity extends Activity {
             long value = unsignedFirstInt(digest) % 100_000_000L;
             return String.format(Locale.US, "%08d", value);
         } catch (Exception error) {
-            return String.format(Locale.US, "%08d", Math.abs(RANDOM.nextInt()) % 100_000_000);
+            return String.format(Locale.US, "%08d", RANDOM.nextInt(100_000_000));
         }
     }
 
@@ -511,12 +772,6 @@ public final class MainActivity extends Activity {
         return digits.substring(0, 4) + "-" + digits.substring(4, 8);
     }
 
-    private void copyDeviceCode() {
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        clipboard.setPrimaryClip(ClipData.newPlainText("Código do dispositivo", deviceCode));
-        Toast.makeText(this, "Código copiado.", Toast.LENGTH_SHORT).show();
-    }
-
     private void setBusy(boolean value) {
         busy = value;
         if (activateButton != null) {
@@ -535,7 +790,89 @@ public final class MainActivity extends Activity {
             return;
         }
         statusText.setText(message);
+        statusText.setVisibility(message == null || message.isEmpty() ? View.GONE : View.VISIBLE);
         statusText.setTextColor(error ? Color.rgb(255, 164, 164) : Color.rgb(164, 224, 188));
+    }
+
+    private void showProgressDialog(String title, String message) {
+        dismissProgressDialog();
+
+        progressDialog = new Dialog(this);
+        progressDialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        progressDialog.setCancelable(false);
+
+        LinearLayout panel = modalPanel();
+        panel.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        progressSpinner = new ProgressBar(this);
+        if (Build.VERSION.SDK_INT >= 21) {
+            progressSpinner.setIndeterminateTintList(ColorStateList.valueOf(Color.rgb(103, 233, 158)));
+        }
+        panel.addView(progressSpinner, size(dp(48), dp(48)));
+
+        progressTitle = text(title, 20, Color.WHITE, true);
+        progressTitle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleParams = size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        titleParams.topMargin = dp(12);
+        panel.addView(progressTitle, titleParams);
+
+        progressMessage = text(message, 14, Color.rgb(185, 216, 198), false);
+        progressMessage.setGravity(Gravity.CENTER);
+        progressMessage.setPadding(0, dp(8), 0, 0);
+        panel.addView(progressMessage, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        progressClose = actionButton("Fechar", false);
+        progressClose.setVisibility(View.GONE);
+        progressClose.setOnClickListener(view -> dismissProgressDialog());
+        LinearLayout.LayoutParams closeParams = size(dp(150), dp(40));
+        closeParams.topMargin = dp(16);
+        panel.addView(progressClose, closeParams);
+
+        progressDialog.setContentView(panel);
+        progressDialog.show();
+        Window dialogWindow = progressDialog.getWindow();
+        if (dialogWindow != null) {
+            dialogWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            dialogWindow.setLayout(Math.min(dp(400), screenWidth - dp(32)), ViewGroup.LayoutParams.WRAP_CONTENT);
+            dialogWindow.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+    }
+
+    private void updateProgressDialog(String title, String message) {
+        if (progressDialog == null || !progressDialog.isShowing()) {
+            showProgressDialog(title, message);
+            return;
+        }
+        progressTitle.setText(title);
+        progressMessage.setText(message);
+    }
+
+    private void showProgressError(String message) {
+        updateProgressDialog("Não foi possível concluir", message);
+        if (progressSpinner != null) {
+            progressSpinner.setVisibility(View.GONE);
+        }
+        if (progressClose != null) {
+            progressClose.setVisibility(View.VISIBLE);
+            progressClose.requestFocus();
+        }
+        if (progressDialog != null) {
+            progressDialog.setCancelable(true);
+        }
+    }
+
+    private void dismissProgressDialog() {
+        if (progressDialog != null) {
+            if (progressDialog.isShowing()) {
+                progressDialog.dismiss();
+            }
+            progressDialog = null;
+            progressTitle = null;
+            progressMessage = null;
+            progressSpinner = null;
+            progressClose = null;
+        }
     }
 
     private String friendlyError(Exception error) {
@@ -550,16 +887,16 @@ public final class MainActivity extends Activity {
         connection.setConnectTimeout(18_000);
         connection.setReadTimeout(45_000);
         connection.setInstanceFollowRedirects(true);
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) AtivadorUnitvFree/1.0");
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) AtivadorUnitvFree/1.1");
         connection.setRequestProperty("Accept", "*/*");
         return connection;
     }
 
-    private static String readText(String address, int maximumBytes) throws Exception {
+    private static String readText(String address, int maximumBytes, String failureMessage) throws Exception {
         HttpURLConnection connection = open(address);
         try {
             if (connection.getResponseCode() >= 400) {
-                throw new IOException("Não foi possível ler o ids.json publicado.");
+                throw new IOException(failureMessage);
             }
             return readString(connection.getInputStream(), maximumBytes);
         } finally {
@@ -608,9 +945,17 @@ public final class MainActivity extends Activity {
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(24), dp(24), dp(24), dp(24));
-        card.setBackground(round(Color.argb(244, 9, 39, 24), 20, Color.rgb(39, 105, 67), 1));
+        card.setPadding(dp(19), dp(19), dp(19), dp(19));
+        card.setBackground(round(Color.argb(244, 9, 39, 24), 18, Color.rgb(39, 105, 67), 1));
         return card;
+    }
+
+    private LinearLayout modalPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
+        panel.setBackground(round(Color.rgb(8, 38, 23), 18, Color.rgb(56, 132, 86), 1));
+        return panel;
     }
 
     private void addCenteredCard(LinearLayout card) {
@@ -619,12 +964,15 @@ public final class MainActivity extends Activity {
 
         LinearLayout stage = new LinearLayout(this);
         stage.setGravity(Gravity.CENTER);
-        stage.setPadding(dp(20), dp(24), dp(20), dp(24));
+        stage.setPadding(dp(20), dp(20), dp(20), dp(20));
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int width = Math.min(dp(560), Math.max(dp(280), screenWidth - dp(40)));
+        int width = Math.min(dp(448), Math.max(dp(280), screenWidth - dp(40)));
         stage.addView(card, size(width, ViewGroup.LayoutParams.WRAP_CONTENT));
         scroll.addView(stage, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        root.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
     }
 
     private TextView text(String value, int sizeSp, int color, boolean bold) {
@@ -646,7 +994,7 @@ public final class MainActivity extends Activity {
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setFocusable(true);
         button.setClickable(true);
-        button.setPadding(dp(14), 0, dp(14), 0);
+        button.setPadding(dp(12), 0, dp(12), 0);
         button.setBackground(buttonBackground(primary));
         button.setTextColor(buttonTextColors(primary));
         return button;
@@ -706,5 +1054,21 @@ public final class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static final class UpdateInfo {
+        final int versionCode;
+        final String versionName;
+        final String apkUrl;
+        final boolean mandatory;
+        final String message;
+
+        UpdateInfo(int versionCode, String versionName, String apkUrl, boolean mandatory, String message) {
+            this.versionCode = versionCode;
+            this.versionName = versionName;
+            this.apkUrl = apkUrl;
+            this.mandatory = mandatory;
+            this.message = message;
+        }
     }
 }

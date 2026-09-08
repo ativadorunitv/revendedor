@@ -60,14 +60,27 @@ public final class ApkFileProvider extends ContentProvider {
         if (!AUTHORITY.equals(uri.getAuthority()) || uri.getPathSegments().size() != 2 || !"apk".equals(uri.getPathSegments().get(0))) {
             throw new FileNotFoundException("Endereço inválido");
         }
-        File directory = getContext() == null ? null : getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
-        if (directory == null) {
+        if (getContext() == null) {
             throw new FileNotFoundException("Pasta indisponível");
         }
-        File file = new File(directory, uri.getPathSegments().get(1));
+        String fileName = uri.getPathSegments().get(1);
+        File directory = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        File file = directory == null ? null : safeFile(directory, fileName);
+        if (file == null || !file.isFile()) {
+            directory = getContext().getFilesDir();
+            file = safeFile(directory, fileName);
+        }
+        if (file == null || !file.isFile()) {
+            throw new FileNotFoundException("Arquivo inválido");
+        }
+        return file;
+    }
+
+    private File safeFile(File directory, String fileName) throws FileNotFoundException {
+        File file = new File(directory, fileName);
         try {
             String base = directory.getCanonicalPath() + File.separator;
-            if (!file.getCanonicalPath().startsWith(base) || !file.isFile()) {
+            if (!file.getCanonicalPath().startsWith(base)) {
                 throw new FileNotFoundException("Arquivo inválido");
             }
         } catch (IOException error) {
