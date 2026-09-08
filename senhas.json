@@ -1,22 +1,18 @@
 {
-  "versao": 3,
-  "atualizadoEm": "2026-09-08T15:51:27.841Z",
+  "versao": 2,
+  "atualizadoEm": "2026-09-08T17:46:37.188Z",
   "senhas": [
     {
       "id": "cliente-inicial",
       "nome": "Cliente inicial",
       "hashSha256": "b062486a16b921163bd9deb25886c6e5d4bd735615fe96ac764e895899ab28ea",
-      "bloqueado": false,
-      "senhaCriptografada": "YnXZDhs204Z8jT2EpOFHYtHJ4kWWRA==",
-      "iv": "0UnBuGwYSWvFl/Fh"
+      "bloqueado": false
     },
     {
       "id": "cliente-mtsuk3v7-7d1qb7",
       "nome": "Zayan Doux",
-      "hashSha256": "85b72736edb76cff652cf35cc35acea337dd27703bcc9ecf94226186efe72cbc",
-      "bloqueado": false,
-      "senhaCriptografada": "hNfKAAt1sNLAd5BCZ7sGW7puXOvrxg==",
-      "iv": "jjFwCcmzMjVgL5P0"
+      "hashSha256": "6f18f2fc987cd39f6b6bfec66526b8a896f2c697c3947e925c14b7ffe2cc8460",
+      "bloqueado": false
     }
   ]
 }
