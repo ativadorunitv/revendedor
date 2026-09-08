@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07150e">
+  <title>Administrador de Acessos UniTV</title>
+  <style>
+    :root {
+      --text: #f3fff7;
+      --muted: #a5cdb5;
+      --green: #6deca4;
+      --green-2: #32c874;
+      --line: rgba(119, 236, 168, .18);
+      --danger: #ffc0c0;
+      --warning: #ffe1a6;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100svh;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 50% 5%, rgba(35, 167, 96, .18), transparent 34rem),
+        linear-gradient(150deg, #06110b, #0a2016 48%, #06110b);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .18;
+      background-image:
+        linear-gradient(rgba(91, 230, 148, .11) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91, 230, 148, .11) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(circle at center, #000, transparent 77%);
+    }
+
+    button, input { font: inherit; }
+    .shell { position: relative; width: min(100%, 760px); margin: 0 auto; padding: 34px 20px 48px; }
+    .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 22px; }
+    .mark { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 15px; color: #95f4bc; background: rgba(62, 221, 130, .1); }
+    .mark svg { width: 23px; height: 23px; }
+    .brand strong { display: block; font-size: 19px; }
+    .brand small { display: block; margin-top: 2px; color: rgba(128, 236, 173, .68); font-size: 11px; letter-spacing: .17em; text-transform: uppercase; }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 27px;
+      background: linear-gradient(155deg, rgba(13, 43, 29, .95), rgba(5, 26, 16, .9));
+      box-shadow: 0 28px 80px rgba(0, 0, 0, .42), inset 0 1px rgba(255, 255, 255, .04);
+    }
+
+    .login-card { width: min(100%, 470px); margin: 0 auto; }
+    .icon { width: 44px; height: 44px; display: grid; place-items: center; margin: 0 auto 13px; border: 1px solid rgba(112, 238, 166, .19); border-radius: 15px; color: #82efaf; background: rgba(65, 221, 130, .08); }
+    .icon svg { width: 21px; height: 21px; }
+    h1, h2 { margin: 0; letter-spacing: -.025em; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 18px; }
+    .login-card h1, .login-card .lead { text-align: center; }
+    .lead { margin: 7px 0 22px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+    .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .topbar .lead { margin-bottom: 0; }
+    .top-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+    .section { border-top: 1px solid var(--line); padding-top: 22px; margin-top: 22px; }
+    .section-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+    .section-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+    label { display: block; margin-bottom: 7px; color: #dff9e9; font-size: 14px; font-weight: 650; }
+    input { width: 100%; height: 44px; border: 1px solid rgba(118, 231, 163, .22); border-radius: 11px; outline: none; padding: 0 12px; color: #fff; background: rgba(1, 18, 10, .58); }
+    input:focus { border-color: rgba(91, 239, 153, .68); box-shadow: 0 0 0 3px rgba(70, 220, 133, .12); }
+    input::placeholder { color: rgba(188, 230, 204, .38); }
+
+    .admin-password { height: 52px; text-align: center; font-size: 20px; letter-spacing: .06em; }
+    .new-user-row { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; }
+    .button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 10px; padding: 9px 14px; color: #052013; font-weight: 750; cursor: pointer; background: linear-gradient(135deg, #81efad, var(--green-2)); transition: filter .14s, transform .14s; }
+    .button:hover { filter: brightness(1.07); }
+    .button:active { transform: translateY(1px); }
+    .button:disabled { cursor: wait; filter: grayscale(.45); opacity: .58; }
+    .button.wide { width: 100%; margin-top: 16px; }
+    .button.secondary { border: 1px solid rgba(112, 238, 166, .21); color: #aaf5c8; background: rgba(65, 221, 130, .06); }
+    .button.danger { border: 1px solid rgba(255, 134, 134, .22); color: #ffd0d0; background: rgba(181, 45, 45, .13); }
+    .button.warning { border: 1px solid rgba(255, 208, 117, .23); color: var(--warning); background: rgba(170, 110, 20, .12); }
+    .button.small { min-height: 35px; padding: 7px 10px; font-size: 13px; }
+    .text-button { border: 0; padding: 6px; color: rgba(209, 250, 225, .62); cursor: pointer; background: transparent; }
+
+    .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 13px; padding: 11px 13px; color: #dff9e9; background: rgba(1, 18, 10, .45); font-size: 14px; }
+    .statusbar strong { color: var(--green); }
+    .statusbar .changed { color: var(--warning); }
+
+    .message { display: none; margin-top: 14px; border: 1px solid rgba(255, 126, 126, .2); border-radius: 11px; padding: 10px 12px; color: var(--danger); background: rgba(160, 34, 34, .13); font-size: 14px; line-height: 1.45; }
+    .message.show { display: block; }
+    .message.success { color: #baf5d1; border-color: rgba(93, 227, 148, .24); background: rgba(41, 153, 88, .12); }
+
+    .password-result { display: none; margin-top: 16px; border: 1px solid rgba(114, 238, 166, .21); border-radius: 14px; padding: 14px; background: linear-gradient(135deg, rgba(46, 211, 116, .11), rgba(9, 30, 20, .46)); }
+    .password-result.show { display: block; }
+    .password-result small { color: rgba(128, 236, 173, .68); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .password-row { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+    .password { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 26px; letter-spacing: .18em; color: #fff; }
+
+    .users { display: grid; gap: 10px; }
+    .user { border: 1px solid var(--line); border-radius: 14px; padding: 13px; background: rgba(1, 18, 10, .38); }
+    .user.blocked { border-color: rgba(255, 139, 139, .17); opacity: .78; }
+    .user-main { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 12px; }
+    .user-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+    .user-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--muted); font-size: 12px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
+    .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .badge.active { color: #80efae; background: rgba(54, 198, 115, .11); }
+    .badge.blocked { color: #ffb0b0; background: rgba(190, 55, 55, .12); }
+    .empty { margin: 0; border: 1px dashed var(--line); border-radius: 13px; padding: 20px; text-align: center; color: var(--muted); font-size: 14px; }
+    .footer-action { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; margin-top: 20px; }
+    .footer-action p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+    @media (max-width: 650px) {
+      .card { padding: 23px 18px; }
+      .topbar, .section-head { align-items: stretch; flex-direction: column; }
+      .top-actions { justify-content: flex-end; }
+      .new-user-row, .user-main, .footer-action { grid-template-columns: 1fr; }
+      .user-actions { justify-content: flex-start; }
+      .button.create { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="brand">
+      <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg></span>
+      <span><strong>UniTV</strong><small>Administrador de acessos</small></span>
+    </header>
+
+    <section id="admin-login" class="card login-card">
+      <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+      <h1>Área administrativa</h1>
+      <p class="lead">Digite a senha do administrador para gerenciar os acessos.</p>
+      <form id="admin-login-form">
+        <label for="admin-password">Senha do administrador</label>
+        <input id="admin-password" class="admin-password" type="password" autocomplete="current-password" required autofocus>
+        <button id="admin-login-button" class="button wide" type="submit">Entrar</button>
+        <p id="admin-login-message" class="message" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="admin-panel" class="card" hidden>
+      <div class="topbar">
+        <div>
+          <h1>Gerenciar acessos</h1>
+          <p class="lead">Crie, altere ou bloqueie senhas de clientes.</p>
+        </div>
+        <div class="top-actions">
+          <button id="reload-button" class="button secondary small" type="button">Recarregar</button>
+          <button id="admin-logout-button" class="text-button" type="button">Sair</button>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span>Arquivo publicado</span>
+        <strong id="load-status">carregando...</strong>
+      </div>
+
+      <section>
+        <h2>Novo cliente</h2>
+        <p class="lead">A senha criada terá somente 6 números.</p>
+        <form id="new-user-form">
+          <div class="new-user-row">
+            <div>
+              <label for="new-user-name">Nome do cliente</label>
+              <input id="new-user-name" type="text" maxlength="60" placeholder="Ex.: João" required>
+            </div>
+            <button id="create-button" class="button create" type="submit" disabled>Gerar senha</button>
+          </div>
+        </form>
+        <div id="password-result" class="password-result" aria-live="polite">
+          <small id="password-result-label">Senha criada</small>
+          <div class="password-row">
+            <strong id="generated-password" class="password"></strong>
+            <button id="copy-button" class="button secondary small" type="button">Copiar</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Clientes cadastrados</h2>
+            <p>Altere o nome, troque a senha ou bloqueie o acesso.</p>
+          </div>
+          <strong id="user-count">0 clientes</strong>
+        </div>
+        <div id="users" class="users"></div>
+      </section>
+
+      <p id="panel-message" class="message" role="alert"></p>
+
+      <div class="footer-action">
+        <p>Depois de qualquer alteração, baixe o arquivo e substitua o <strong>senhas.json</strong> no repositório.</p>
+        <button id="download-button" class="button" type="button" disabled>Baixar senhas.json</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const PUBLIC_JSON_URL = "https://ativadorunitv.github.io/revendedor/senhas.json";
+    const ADMIN_PASSWORD_HASH = "2ac7b16e169b443e2ce02523bc29454c582d445bb785b6ca95cc15e44e60bf16";
+    const ADMIN_SESSION_KEY = "unitv-admin-authenticated";
+
+    let accessFile = null;
+    let generatedPassword = "";
+    let hasChanges = false;
+
+    const adminLogin = document.getElementById("admin-login");
+    const adminPanel = document.getElementById("admin-panel");
+    const adminPassword = document.getElementById("admin-password");
+    const adminLoginButton = document.getElementById("admin-login-button");
+    const adminLoginMessage = document.getElementById("admin-login-message");
+    const panelMessage = document.getElementById("panel-message");
+    const loadStatus = document.getElementById("load-status");
+    const createButton = document.getElementById("create-button");
+    const downloadButton = document.getElementById("download-button");
+    const passwordResult = document.getElementById("password-result");
+    const passwordResultLabel = document.getElementById("password-result-label");
+    const generatedPasswordElement = document.getElementById("generated-password");
+    const usersElement = document.getElementById("users");
+    const userCount = document.getElementById("user-count");
+
+    async function sha256Hex(value) {
+      const bytes = new TextEncoder().encode(value.normalize("NFKC"));
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      return Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    function showMessage(element, text, success = false) {
+      element.textContent = text;
+      element.classList.toggle("show", Boolean(text));
+      element.classList.toggle("success", Boolean(text) && success);
+    }
+
+    function validateAccessFile(data) {
+      if (!data || !Array.isArray(data.senhas)) throw new Error("O senhas.json publicado não possui uma lista válida.");
+      data.senhas = data.senhas.map((record, index) => ({
+        id: String(record.id || `cliente-${index + 1}`),
+        nome: String(record.nome || `Cliente ${index + 1}`),
+        hashSha256: String(record.hashSha256 || "").toLowerCase(),
+        bloqueado: record.bloqueado === true || record.ativo === false
+      }));
+      return data;
+    }
+
+    async function loadPublishedJson() {
+      if (hasChanges && !confirm("As alterações ainda não foram baixadas. Deseja descartá-las e recarregar o arquivo publicado?")) return;
+      loadStatus.textContent = "carregando...";
+      loadStatus.className = "";
+      createButton.disabled = true;
+      downloadButton.disabled = true;
+      showMessage(panelMessage, "");
+      try {
+        const separator = PUBLIC_JSON_URL.includes("?") ? "&" : "?";
+        const response = await fetch(`${PUBLIC_JSON_URL}${separator}v=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`Não foi possível abrir o JSON publicado (${response.status}).`);
+        accessFile = validateAccessFile(await response.json());
+        hasChanges = false;
+        generatedPassword = "";
+        passwordResult.classList.remove("show");
+        loadStatus.textContent = `${accessFile.senhas.length} cliente(s)`;
+        createButton.disabled = false;
+        renderUsers();
+      } catch (error) {
+        accessFile = null;
+        usersElement.innerHTML = '<p class="empty">Não foi possível carregar os clientes publicados.</p>';
+        userCount.textContent = "0 clientes";
+        loadStatus.textContent = "falha ao carregar";
+        loadStatus.className = "changed";
+        showMessage(panelMessage, error.message || "Falha ao carregar o arquivo publicado.");
+      }
+    }
+
+    function markChanged(message = "Alteração pronta. Baixe o JSON para publicar.") {
+      hasChanges = true;
+      loadStatus.textContent = "alterações não publicadas";
+      loadStatus.className = "changed";
+      downloadButton.disabled = false;
+      showMessage(panelMessage, message, true);
+    }
+
+    function randomSixDigits() {
+      const maximum = 4294000000;
+      const values = new Uint32Array(1);
+      do crypto.getRandomValues(values); while (values[0] >= maximum);
+      return String(values[0] % 1000000).padStart(6, "0");
+    }
+
+    async function createUniquePassword() {
+      if (!accessFile) throw new Error("Carregue o senhas.json publicado primeiro.");
+      const knownHashes = new Set(accessFile.senhas.map(record => record.hashSha256.toLowerCase()));
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const password = randomSixDigits();
+        const hash = await sha256Hex(password);
+        if (!knownHashes.has(hash)) return { password, hash };
+      }
+      throw new Error("Não foi possível criar uma senha única. Tente novamente.");
+    }
+
+    function createRecordId() {
+      const random = crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+      return `cliente-${Date.now().toString(36)}-${random}`;
+    }
+
+    function showGeneratedPassword(password, label) {
+      generatedPassword = password;
+      passwordResultLabel.textContent = label;
+      generatedPasswordElement.textContent = password;
+      passwordResult.classList.add("show");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function renderUsers() {
+      if (!accessFile || accessFile.senhas.length === 0) {
+        usersElement.innerHTML = '<p class="empty">Nenhum cliente cadastrado.</p>';
+        userCount.textContent = "0 clientes";
+        return;
+      }
+
+      userCount.textContent = `${accessFile.senhas.length} cliente(s)`;
+      usersElement.innerHTML = accessFile.senhas.map((record, index) => `
+        <article class="user ${record.bloqueado ? "blocked" : ""}" data-index="${index}">
+          <div class="user-meta">
+            <span class="badge ${record.bloqueado ? "blocked" : "active"}">${record.bloqueado ? "Bloqueado" : "Ativo"}</span>
+            <span>ID: ${escapeHtml(record.id)}</span>
+          </div>
+          <div class="user-main">
+            <div>
+              <label for="name-${index}">Nome do cliente</label>
+              <input id="name-${index}" class="user-name" type="text" maxlength="60" value="${escapeHtml(record.nome)}">
+            </div>
+            <div class="user-actions">
+              <button class="button secondary small save-name" type="button">Salvar nome</button>
+              <button class="button secondary small new-password" type="button">Nova senha</button>
+              <button class="button ${record.bloqueado ? "secondary" : "warning"} small toggle-access" type="button">${record.bloqueado ? "Desbloquear" : "Bloquear"}</button>
+            </div>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    document.getElementById("admin-login-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      adminLoginButton.disabled = true;
+      showMessage(adminLoginMessage, "");
+      try {
+        const hash = await sha256Hex(adminPassword.value);
+        if (hash !== ADMIN_PASSWORD_HASH) throw new Error("Senha do administrador incorreta.");
+        sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
+        adminPassword.value = "";
+        adminLogin.hidden = true;
+        adminPanel.hidden = false;
+        await loadPublishedJson();
+      } catch (error) {
+        showMessage(adminLoginMessage, error.message || "Não foi possível entrar.");
+      } finally {
+        adminLoginButton.disabled = false;
+      }
+    });
+
+    document.getElementById("new-user-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const nameInput = document.getElementById("new-user-name");
+      const name = nameInput.value.trim();
+      if (!name) return showMessage(panelMessage, "Informe o nome do cliente.");
+      createButton.disabled = true;
+      try {
+        const credentials = await createUniquePassword();
+        accessFile.senhas.push({
+          id: createRecordId(),
+          nome: name,
+          hashSha256: credentials.hash,
+          bloqueado: false
+        });
+        showGeneratedPassword(credentials.password, `Senha criada para ${name}`);
+        nameInput.value = "";
+        renderUsers();
+        markChanged("Cliente criado. Copie a senha e baixe o JSON atualizado.");
+      } catch (error) {
+        showMessage(panelMessage, error.message || "Não foi possível criar a senha.");
+      } finally {
+        createButton.disabled = !accessFile;
+      }
+    });
+
+    usersElement.addEventListener("click", async event => {
+      const button = event.target.closest("button");
+      const card = event.target.closest(".user");
+      if (!button || !card || !accessFile) return;
+      const index = Number(card.dataset.index);
+      const record = accessFile.senhas[index];
+      if (!record) return;
+
+      if (button.classList.contains("save-name")) {
+        const name = card.querySelector(".user-name").value.trim();
+        if (!name) return showMessage(panelMessage, "O nome do cliente não pode ficar vazio.");
+        record.nome = name;
+        renderUsers();
+        markChanged("Nome alterado. Baixe o JSON atualizado.");
+        return;
+      }
+
+      if (button.classList.contains("toggle-access")) {
+        record.bloqueado = !record.bloqueado;
+        renderUsers();
+        markChanged(record.bloqueado
+          ? `Acesso de ${record.nome} bloqueado.`
+          : `Acesso de ${record.nome} desbloqueado.`);
+        return;
+      }
+
+      if (button.classList.contains("new-password")) {
+        button.disabled = true;
+        try {
+          const credentials = await createUniquePassword();
+          record.hashSha256 = credentials.hash;
+          record.bloqueado = false;
+          showGeneratedPassword(credentials.password, `Nova senha para ${record.nome}`);
+          renderUsers();
+          markChanged("Senha alterada. A senha anterior deixará de funcionar após publicar o JSON.");
+        } catch (error) {
+          showMessage(panelMessage, error.message || "Não foi possível trocar a senha.");
+          button.disabled = false;
+        }
+      }
+    });
+
+    document.getElementById("copy-button").addEventListener("click", async event => {
+      if (!generatedPassword) return;
+      await navigator.clipboard.writeText(generatedPassword);
+      const original = event.currentTarget.textContent;
+      event.currentTarget.textContent = "Copiado";
+      setTimeout(() => { event.currentTarget.textContent = original; }, 1400);
+    });
+
+    downloadButton.addEventListener("click", () => {
+      if (!accessFile) return;
+      const updated = {
+        versao: 2,
+        atualizadoEm: new Date().toISOString(),
+        senhas: accessFile.senhas.map(record => ({
+          id: record.id,
+          nome: record.nome,
+          hashSha256: record.hashSha256,
+          bloqueado: record.bloqueado
+        }))
+      };
+      const blob = new Blob([JSON.stringify(updated, null, 2) + "\n"], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "senhas.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showMessage(panelMessage, "JSON baixado. Substitua o arquivo no GitHub para publicar as alterações.", true);
+    });
+
+    document.getElementById("reload-button").addEventListener("click", loadPublishedJson);
+
+    document.getElementById("admin-logout-button").addEventListener("click", () => {
+      if (hasChanges && !confirm("As alterações ainda não foram baixadas. Deseja sair mesmo assim?")) return;
+      sessionStorage.removeItem(ADMIN_SESSION_KEY);
+      accessFile = null;
+      hasChanges = false;
+      adminPanel.hidden = true;
+      adminLogin.hidden = false;
+      showMessage(adminLoginMessage, "");
+      setTimeout(() => adminPassword.focus(), 0);
+    });
+
+    window.addEventListener("beforeunload", event => {
+      if (!hasChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+
+    if (sessionStorage.getItem(ADMIN_SESSION_KEY) === "1") {
+      adminLogin.hidden = true;
+      adminPanel.hidden = false;
+      loadPublishedJson();
+    }
+
+    document.documentElement.dataset.appReady = "true";
+  </script>
+</body>
+</html>

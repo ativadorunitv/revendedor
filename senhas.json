@@ -1,0 +1,12 @@
+{
+  "versao": 2,
+  "atualizadoEm": "2026-09-08T12:00:00-03:00",
+  "senhas": [
+    {
+      "id": "cliente-inicial",
+      "nome": "Cliente inicial",
+      "hashSha256": "b062486a16b921163bd9deb25886c6e5d4bd735615fe96ac764e895899ab28ea",
+      "bloqueado": false
+    }
+  ]
+}
