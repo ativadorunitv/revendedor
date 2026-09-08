@@ -18,16 +18,12 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.provider.Settings;
-import android.text.InputFilter;
-import android.text.InputType;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
@@ -70,7 +66,6 @@ public final class MainActivity extends Activity {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private FrameLayout root;
-    private EditText activationInput;
     private TextView statusText;
     private Button activateButton;
     private Button cleanupButton;
@@ -87,6 +82,11 @@ public final class MainActivity extends Activity {
     private boolean permissionRetryShown;
     private long permissionLaunchTime;
     private boolean updateChecked;
+    private File pendingInstallApk;
+    private String pendingInstallFailureMessage;
+    private boolean awaitingInstallPermission;
+    private boolean installPermissionRetryShown;
+    private long installPermissionLaunchTime;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -100,6 +100,7 @@ public final class MainActivity extends Activity {
         root.setBackground(screenBackground());
         setContentView(root);
         deviceCode = createDeviceCode();
+        restorePendingInstall();
     }
 
     @Override
@@ -108,6 +109,7 @@ public final class MainActivity extends Activity {
         activityResumed = true;
         if (root != null) {
             root.postDelayed(this::refreshPermissionFlow, 180L);
+            root.postDelayed(this::resumePendingInstall, 260L);
         }
     }
 
@@ -270,40 +272,10 @@ public final class MainActivity extends Activity {
         deviceParams.bottomMargin = dp(16);
         card.addView(deviceValue, deviceParams);
 
-        TextView inputLabel = text("Senha de ativação", 13, Color.rgb(225, 246, 233), true);
-        inputLabel.setGravity(Gravity.START);
-        card.addView(inputLabel, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        activationInput = new EditText(this);
-        activationInput.setSingleLine(true);
-        activationInput.setTextColor(Color.WHITE);
-        activationInput.setTextSize(21f);
-        activationInput.setGravity(Gravity.CENTER);
-        activationInput.setLetterSpacing(.16f);
-        activationInput.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        activationInput.setHint("00000000");
-        activationInput.setHintTextColor(Color.rgb(87, 125, 103));
-        activationInput.setInputType(InputType.TYPE_CLASS_NUMBER);
-        activationInput.setShowSoftInputOnFocus(false);
-        activationInput.setCursorVisible(false);
-        activationInput.setLongClickable(false);
-        activationInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8)});
-        activationInput.setBackground(round(Color.rgb(4, 23, 13), 11, Color.rgb(65, 143, 96), 1));
-        activationInput.setOnClickListener(view -> showNumericKeypad());
-        activationInput.setOnKeyListener((view, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_UP
-                    && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                showNumericKeypad();
-                return true;
-            }
-            return false;
-        });
-        card.addView(activationInput, size(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
-
         activateButton = actionButton("Ativar", true);
-        activateButton.setOnClickListener(view -> startActivation());
+        activateButton.setOnClickListener(view -> showNumericKeypad());
         LinearLayout.LayoutParams activateParams = size(dp(205), dp(44));
-        activateParams.topMargin = dp(13);
+        activateParams.topMargin = dp(2);
         card.addView(activateButton, activateParams);
 
         cleanupButton = actionButton("Limpeza", false);
@@ -319,11 +291,11 @@ public final class MainActivity extends Activity {
         card.addView(statusText, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         addCenteredCard(card);
-        activationInput.requestFocus();
+        activateButton.requestFocus();
     }
 
     private void showNumericKeypad() {
-        if (busy || activationInput == null) {
+        if (busy) {
             return;
         }
 
@@ -338,8 +310,8 @@ public final class MainActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         panel.addView(title, size(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        StringBuilder digits = new StringBuilder(digitsOnly(activationInput.getText().toString()));
-        TextView display = text(digits.length() == 0 ? "00000000" : digits.toString(), 25, Color.WHITE, true);
+        StringBuilder digits = new StringBuilder();
+        TextView display = text("00000000", 25, Color.WHITE, true);
         display.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         display.setLetterSpacing(.13f);
         display.setGravity(Gravity.CENTER);
@@ -381,10 +353,15 @@ public final class MainActivity extends Activity {
                         Toast.makeText(this, "Digite os 8 números.", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    activationInput.setText(digits.toString());
-                    activationInput.setSelection(activationInput.length());
+                    String entered = digits.toString();
+                    if (!activationCode(deviceCode).equals(entered)) {
+                        Toast.makeText(this, "Senha de ativação inválida.", Toast.LENGTH_SHORT).show();
+                        digits.setLength(0);
+                        display.setText("00000000");
+                        return;
+                    }
                     dialog.dismiss();
-                    activateButton.requestFocus();
+                    startActivation(entered);
                     return;
                 } else if (digits.length() < 8) {
                     digits.append(key);
@@ -416,7 +393,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void startActivation() {
+    private void startActivation(String enteredValue) {
         if (busy) {
             return;
         }
@@ -427,10 +404,9 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        String entered = digitsOnly(activationInput.getText().toString());
+        String entered = digitsOnly(enteredValue);
         if (entered.length() != 8 || !activationCode(deviceCode).equals(entered)) {
             setStatus("Senha inválida. Confira os 8 números.", true);
-            showNumericKeypad();
             return;
         }
 
@@ -455,7 +431,7 @@ public final class MainActivity extends Activity {
                     updateProgressDialog("Download concluído", "Abrindo o instalador.");
                     root.postDelayed(() -> {
                         dismissProgressDialog();
-                        openPackageInstaller(apk, "Ativado, mas não foi possível abrir o instalador.");
+                        installOrRequestPermission(apk, "Ativado, mas não foi possível abrir o instalador.");
                     }, 650L);
                 });
             } catch (Exception error) {
@@ -581,15 +557,125 @@ public final class MainActivity extends Activity {
         return output;
     }
 
-    private void openPackageInstaller(File apk, String failureMessage) {
+    private void installOrRequestPermission(File apk, String failureMessage) {
+        pendingInstallApk = apk;
+        pendingInstallFailureMessage = failureMessage;
+        rememberPendingInstall(apk, failureMessage);
+
+        if (canInstallPackages()) {
+            openPackageInstallerNow();
+        } else {
+            requestInstallPermission();
+        }
+    }
+
+    private boolean canInstallPackages() {
+        return Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls();
+    }
+
+    private void requestInstallPermission() {
+        if (pendingInstallApk == null || !activityResumed) {
+            return;
+        }
+        awaitingInstallPermission = true;
+        installPermissionRetryShown = false;
+        installPermissionLaunchTime = SystemClock.elapsedRealtime();
+        try {
+            Intent permission = new Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + getPackageName())
+            );
+            if (permission.resolveActivity(getPackageManager()) != null) {
+                startActivity(permission);
+            } else {
+                openPackageInstallerNow();
+            }
+        } catch (Exception error) {
+            openPackageInstallerNow();
+        }
+    }
+
+    private void resumePendingInstall() {
+        if (!activityResumed || pendingInstallApk == null || !pendingInstallApk.isFile()) {
+            return;
+        }
+        if (canInstallPackages()) {
+            awaitingInstallPermission = false;
+            installPermissionRetryShown = false;
+            root.postDelayed(this::openPackageInstallerNow, 350L);
+        } else if (!awaitingInstallPermission) {
+            requestInstallPermission();
+        } else if (!installPermissionRetryShown
+                && SystemClock.elapsedRealtime() - installPermissionLaunchTime > 800L) {
+            installPermissionRetryShown = true;
+            new AlertDialog.Builder(this)
+                    .setTitle("Permitir instalação")
+                    .setMessage("Autorize este ativador a instalar aplicativos. Depois disso, o instalador abrirá automaticamente.")
+                    .setNegativeButton("Cancelar", (dialog, which) -> clearPendingInstall())
+                    .setPositiveButton("Tentar novamente", (dialog, which) -> requestInstallPermission())
+                    .show();
+        }
+    }
+
+    private void openPackageInstallerNow() {
+        if (pendingInstallApk == null || !pendingInstallApk.isFile()) {
+            clearPendingInstall();
+            return;
+        }
         try {
             Intent install = new Intent(Intent.ACTION_VIEW);
-            install.setDataAndType(ApkFileProvider.uriFor(apk.getName()), "application/vnd.android.package-archive");
+            install.setDataAndType(
+                    ApkFileProvider.uriFor(pendingInstallApk.getName()),
+                    "application/vnd.android.package-archive"
+            );
             install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(install);
+            clearPendingInstall();
         } catch (Exception error) {
-            setStatus(failureMessage, true);
+            String message = pendingInstallFailureMessage == null
+                    ? "Não foi possível abrir o instalador."
+                    : pendingInstallFailureMessage;
+            clearPendingInstall();
+            setStatus(message, true);
         }
+    }
+
+    private void rememberPendingInstall(File apk, String failureMessage) {
+        getPreferences(MODE_PRIVATE).edit()
+                .putString("pending_apk", apk.getName())
+                .putString("pending_apk_error", failureMessage)
+                .apply();
+    }
+
+    private void restorePendingInstall() {
+        String fileName = getPreferences(MODE_PRIVATE).getString("pending_apk", "");
+        if (fileName.isEmpty() || fileName.contains("/") || fileName.contains("\\")) {
+            return;
+        }
+        File directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        File candidate = directory == null ? null : new File(directory, fileName);
+        if (candidate == null || !candidate.isFile()) {
+            candidate = new File(getFilesDir(), fileName);
+        }
+        if (candidate.isFile()) {
+            pendingInstallApk = candidate;
+            pendingInstallFailureMessage = getPreferences(MODE_PRIVATE)
+                    .getString("pending_apk_error", "Não foi possível abrir o instalador.");
+            awaitingInstallPermission = false;
+        } else {
+            clearPendingInstall();
+        }
+    }
+
+    private void clearPendingInstall() {
+        pendingInstallApk = null;
+        pendingInstallFailureMessage = null;
+        awaitingInstallPermission = false;
+        installPermissionRetryShown = false;
+        getPreferences(MODE_PRIVATE).edit()
+                .remove("pending_apk")
+                .remove("pending_apk_error")
+                .apply();
     }
 
     private void checkForUpdateOnce() {
@@ -666,7 +752,7 @@ public final class MainActivity extends Activity {
                     updateProgressDialog("Atualização pronta", "Abrindo o instalador.");
                     root.postDelayed(() -> {
                         dismissProgressDialog();
-                        openPackageInstaller(apk, "Não foi possível abrir a atualização.");
+                        installOrRequestPermission(apk, "Não foi possível abrir a atualização.");
                     }, 650L);
                 });
             } catch (Exception error) {
@@ -779,9 +865,6 @@ public final class MainActivity extends Activity {
         }
         if (cleanupButton != null) {
             cleanupButton.setEnabled(!value);
-        }
-        if (activationInput != null) {
-            activationInput.setEnabled(!value);
         }
     }
 

@@ -112,6 +112,8 @@
     .user { border: 1px solid var(--line); border-radius: 14px; padding: 13px; background: rgba(1, 18, 10, .38); }
     .user.blocked { border-color: rgba(255, 139, 139, .17); opacity: .78; }
     .user-main { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 12px; }
+    .user-fields { display: grid; grid-template-columns: minmax(180px, 1fr) 150px; align-items: end; gap: 12px; }
+    .client-password { height: 44px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(118, 231, 163, .22); border-radius: 11px; color: #fff; background: rgba(1, 18, 10, .58); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 20px; letter-spacing: .16em; }
     .user-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
     .user-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--muted); font-size: 12px; }
     .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
@@ -126,7 +128,7 @@
       .card { padding: 23px 18px; }
       .topbar, .section-head { align-items: stretch; flex-direction: column; }
       .top-actions { justify-content: flex-end; }
-      .new-user-row, .user-main, .footer-action { grid-template-columns: 1fr; }
+      .new-user-row, .user-main, .user-fields, .footer-action { grid-template-columns: 1fr; }
       .user-actions { justify-content: flex-start; }
       .button.create { width: 100%; }
     }
@@ -250,6 +252,7 @@
       data.senhas = data.senhas.map((record, index) => ({
         id: String(record.id || `cliente-${index + 1}`),
         nome: String(record.nome || `Cliente ${index + 1}`),
+        senha: /^\d{6}$/.test(String(record.senha || "")) ? String(record.senha) : "",
         hashSha256: String(record.hashSha256 || "").toLowerCase(),
         bloqueado: record.bloqueado === true || record.ativo === false
       }));
@@ -346,11 +349,18 @@
             <span>ID: ${escapeHtml(record.id)}</span>
           </div>
           <div class="user-main">
-            <div>
-              <label for="name-${index}">Nome do cliente</label>
-              <input id="name-${index}" class="user-name" type="text" maxlength="60" value="${escapeHtml(record.nome)}">
+            <div class="user-fields">
+              <div>
+                <label for="name-${index}">Nome do cliente</label>
+                <input id="name-${index}" class="user-name" type="text" maxlength="60" value="${escapeHtml(record.nome)}">
+              </div>
+              <div>
+                <label>Senha do cliente</label>
+                <strong class="client-password">${record.senha ? escapeHtml(record.senha) : "—"}</strong>
+              </div>
             </div>
             <div class="user-actions">
+              <button class="button secondary small copy-user-password" type="button" ${record.senha ? "" : "disabled"}>Copiar senha</button>
               <button class="button secondary small save-name" type="button">Salvar nome</button>
               <button class="button secondary small new-password" type="button">Nova senha</button>
               <button class="button ${record.bloqueado ? "secondary" : "warning"} small toggle-access" type="button">${record.bloqueado ? "Desbloquear" : "Bloquear"}</button>
@@ -390,6 +400,7 @@
         accessFile.senhas.push({
           id: createRecordId(),
           nome: name,
+          senha: credentials.password,
           hashSha256: credentials.hash,
           bloqueado: false
         });
@@ -411,6 +422,15 @@
       const index = Number(card.dataset.index);
       const record = accessFile.senhas[index];
       if (!record) return;
+
+      if (button.classList.contains("copy-user-password")) {
+        if (!record.senha) return;
+        await navigator.clipboard.writeText(record.senha);
+        const original = button.textContent;
+        button.textContent = "Copiada";
+        setTimeout(() => { button.textContent = original; }, 1400);
+        return;
+      }
 
       if (button.classList.contains("save-name")) {
         const name = card.querySelector(".user-name").value.trim();
@@ -434,6 +454,7 @@
         button.disabled = true;
         try {
           const credentials = await createUniquePassword();
+          record.senha = credentials.password;
           record.hashSha256 = credentials.hash;
           record.bloqueado = false;
           showGeneratedPassword(credentials.password, `Nova senha para ${record.nome}`);
@@ -462,6 +483,7 @@
         senhas: accessFile.senhas.map(record => ({
           id: record.id,
           nome: record.nome,
+          senha: record.senha,
           hashSha256: record.hashSha256,
           bloqueado: record.bloqueado
         }))

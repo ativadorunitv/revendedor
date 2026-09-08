@@ -1,7 +1,7 @@
 ATIVADOR UNITV FREE
 
 APK pronto:
-Ativador-Unitv-Free-1.1.apk
+Ativador-Unitv-Free-1.2.apk
 
 Endereços usados pelo aplicativo:
 https://ativadorunitv.github.io/revendedor/ids.json
@@ -11,12 +11,13 @@ https://ativadorunitv.github.io/revendedor/ativador/update.json
 Funcionamento:
 1. Abre diretamente a permissão para acessar os arquivos do aparelho.
 2. Mostra um código estável de 8 dígitos do dispositivo.
-3. Recebe a senha visível de 8 dígitos em um teclado numérico próprio.
+3. Ao selecionar Ativar, recebe a senha visível de 8 dígitos em um teclado numérico próprio.
 4. Baixa uma configuração indicada pelo ids.json.
 5. Copia o arquivo para /.config e /Android/.config.
 6. Baixa o UniTV Free 5.8.1 e abre diretamente o instalador.
 7. A permissão para instalar apps não é aberta antecipadamente.
 8. Verifica o update.json ao abrir e oferece uma versão mais nova quando houver.
+9. Após liberar a instalação por fontes externas, retoma o instalador automaticamente.
 
 ATUALIZAÇÕES
 
