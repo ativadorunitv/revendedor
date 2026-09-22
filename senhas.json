@@ -1,6 +1,6 @@
 {
   "versao": 2,
-  "atualizadoEm": "2026-09-11T02:13:37.193Z",
+  "atualizadoEm": "2026-09-22T02:15:51.474Z",
   "senhas": [
     {
       "id": "cliente-mtsuk3v7-7d1qb7",
@@ -28,7 +28,7 @@
       "nome": "Julierme",
       "senha": "662202",
       "hashSha256": "e81e27881cebc0784af24cc5d71d43469a4e1108877b85df705703efe0d0b902",
-      "bloqueado": false
+      "bloqueado": true
     },
     {
       "id": "cliente-mtt1xnpv-pmhlup",
